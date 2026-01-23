@@ -17,13 +17,14 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from ticket.views import TicketViewSet, CommentViewSet
+from ticket.views import TicketViewSet, CommentViewSet, WebhookViewSet
 import user.views as user_views
 
 # Create a router and register our viewsets
 router = DefaultRouter()
 router.register(r'tickets', TicketViewSet, basename='ticket')
 router.register(r'comments', CommentViewSet, basename='comment')
+router.register(r'webhooks', WebhookViewSet, basename='webhook')
 
 urlpatterns = [
     path('admin/', admin.site.urls),

@@ -14,8 +14,8 @@ class TicketSerializer(serializers.ModelSerializer):
     class Meta:
         model = Ticket
         fields = ['id', 'title', 'description', 'status', 'created_at', 'updated_at', 
-                  'assignee', 'assignee_name', 'assignee_username']
-        read_only_fields = ['assignee', 'created_at', 'updated_at']
+                  'assignee', 'assignee_name', 'assignee_username', 'jira_issue_key', 'jira_issue_id']
+        read_only_fields = ['assignee', 'created_at', 'updated_at', 'jira_issue_key', 'jira_issue_id']
 
 
 class CommentSerializer(serializers.ModelSerializer):

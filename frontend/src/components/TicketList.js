@@ -39,19 +39,6 @@ const TicketList = ({ isAdmin = false }) => {
     }
   };
 
-  const updateTicketStatus = async (ticketId, newStatus) => {
-    try {
-      await axios.patch(
-        `/api/tickets/${ticketId}/update_status/`,
-        { status: newStatus },
-        { withCredentials: true }
-      );
-      fetchTickets();
-    } catch (err) {
-      alert('Failed to update ticket status. Please try again.');
-      console.error('Error updating ticket:', err);
-    }
-  };
 
   const getStatusBadgeClass = (status) => {
     switch (status) {
@@ -141,43 +128,6 @@ const TicketList = ({ isAdmin = false }) => {
                   )}
                 </div>
 
-                {isAdmin && (
-                  <div className="ticket-actions" onClick={(e) => e.stopPropagation()}>
-                    {/* Only admins can change ticket status */}
-                    {ticket.status === 'open' && (
-                      <button
-                        onClick={() => updateTicketStatus(ticket.id, 'in_progress')}
-                        className="btn btn-success btn-sm"
-                      >
-                        Start Progress
-                      </button>
-                    )}
-                    {ticket.status === 'in_progress' && (
-                      <>
-                        <button
-                          onClick={() => updateTicketStatus(ticket.id, 'open')}
-                          className="btn btn-secondary btn-sm"
-                        >
-                          Reopen
-                        </button>
-                        <button
-                          onClick={() => updateTicketStatus(ticket.id, 'closed')}
-                          className="btn btn-danger btn-sm"
-                        >
-                          Close
-                        </button>
-                      </>
-                    )}
-                    {ticket.status === 'closed' && (
-                      <button
-                        onClick={() => updateTicketStatus(ticket.id, 'open')}
-                        className="btn btn-success btn-sm"
-                      >
-                        Reopen
-                      </button>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
           ))}

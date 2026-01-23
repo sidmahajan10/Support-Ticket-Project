@@ -18,6 +18,8 @@ class Ticket(models.Model):
         on_delete=models.CASCADE,
         related_name='tickets'
     )
+    jira_issue_key = models.CharField(max_length=50, blank=True, null=True, help_text='Jira issue key if synced to Jira')
+    jira_issue_id = models.CharField(max_length=50, blank=True, null=True, help_text='Jira issue ID if synced to Jira')
 
     def __str__(self):
         return self.title
