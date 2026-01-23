@@ -5,6 +5,7 @@ import './TicketComments.css';
 
 const TicketComments = ({ ticket, onClose }) => {
   const { user } = useAuth();
+  const isAdmin = user?.is_staff;
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
@@ -149,18 +150,25 @@ const TicketComments = ({ ticket, onClose }) => {
 
         {error && <div className="error-message">{error}</div>}
 
-        <form onSubmit={handleSubmit} className="comment-form">
-          <textarea
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Type your comment..."
-            rows="3"
-            disabled={submitting}
-          />
-          <button type="submit" className="btn btn-primary" disabled={submitting || !newComment.trim()}>
-            {submitting ? 'Posting...' : 'Post Comment'}
-          </button>
-        </form>
+        {!isAdmin && (
+          <form onSubmit={handleSubmit} className="comment-form">
+            <textarea
+              value={newComment}
+              onChange={(e) => setNewComment(e.target.value)}
+              placeholder="Type your comment..."
+              rows="3"
+              disabled={submitting}
+            />
+            <button type="submit" className="btn btn-primary" disabled={submitting || !newComment.trim()}>
+              {submitting ? 'Posting...' : 'Post Comment'}
+            </button>
+          </form>
+        )}
+        {isAdmin && (
+          <div className="admin-comment-notice">
+            <p>Admins can only view comments. Regular users can add comments to their tickets.</p>
+          </div>
+        )}
       </div>
     </div>
   );

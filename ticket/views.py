@@ -6,14 +6,25 @@ from .models import Ticket, Comment
 from .serializers import TicketSerializer, CommentSerializer
 from rest_framework.permissions import AllowAny
 from rest_framework.viewsets import ViewSet
+import json
 import os
 import requests
+from requests.auth import HTTPBasicAuth
 import base64
 import logging
 from dotenv import load_dotenv
+from django.contrib.auth import get_user_model
+User = get_user_model()
+
+
 
 # Try to load .env file, but don't fail if it doesn't exist or can't be read
-load_dotenv()
+try:
+    load_dotenv()
+except Exception as e:
+    logging.getLogger(__name__).warning(f"Could not load .env file: {e}")
+
+logger = logging.getLogger(__name__)
 
 
 class TicketViewSet(viewsets.ModelViewSet):
@@ -114,18 +125,7 @@ class TicketViewSet(viewsets.ModelViewSet):
                 exc_info=True
             )
 
-    # @action(detail=True, methods=['patch'])
-    # def update_status(self, request, pk=None):
-    #     """
-    #     Update ticket status.
         
-    #     This endpoint is primarily intended for webhook integration with Jira.
-    #     Admins cannot change ticket status from the frontend UI - status changes should come from Jira webhooks.
-    #     """
-        
-    
-
-    
 
 class CommentViewSet(viewsets.ModelViewSet):
     serializer_class = CommentSerializer
@@ -156,17 +156,86 @@ class CommentViewSet(viewsets.ModelViewSet):
         user = self.request.user
         ticket = serializer.validated_data['ticket']
         
-        # Ensure user has access to the ticket
+        # Prevent admins from commenting - they can only view comments
         if user.is_staff:
-            # Admins can comment on all tickets (including closed ones)
-            pass
-        else:
-            # Regular users can only comment on their own tickets
-            if ticket.assignee != user:
-                from rest_framework.exceptions import PermissionDenied
-                raise PermissionDenied('You do not have permission to comment on this ticket.')
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Admins cannot comment on tickets. They can only view comments.')
         
-        serializer.save(author=user)
+        # Regular users can only comment on their own tickets
+        if ticket.assignee != user:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('You do not have permission to comment on this ticket.')
+        
+        comment = serializer.save(author=user)
+
+        # Only create Jira comment if ticket has a Jira issue ID
+        if not ticket.jira_issue_id:
+            logger.warning(
+                f"Ticket {ticket.id} does not have a Jira issue ID. Skipping Jira comment creation."
+            )
+            return
+
+        jira_base_url = os.getenv('JIRA_URL')
+        jira_username = os.getenv('JIRA_USERNAME')
+        jira_api_token = os.getenv('JIRA_API_TOKEN')
+
+        jira_base_url = jira_base_url.rstrip('/')
+        jira_comment_url = f"{jira_base_url}/{ticket.jira_issue_id}/comment"
+
+        auth = HTTPBasicAuth(jira_username, jira_api_token)
+
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "body": comment.content
+        }
+
+        try:
+            response = requests.post(
+                jira_comment_url,
+                json=payload,
+                headers=headers,
+                auth=auth,
+                timeout=10
+            )
+
+            if response.status_code == 201:
+                jira_comment = response.json()
+                comment.jira_comment_id = jira_comment.get('id')
+                comment.save()
+                logger.info(
+                    f"Successfully created Jira comment {comment.jira_comment_id} "
+                    f"for ticket {comment.ticket.id} (Title: {comment.ticket.title})"
+                )
+            else:
+                logger.error(
+                    f"Jira API request failed for comment {comment.id}. "
+                    f"Status code: {response.status_code}. "
+                    f"Response: {response.text}"
+                )
+        except requests.exceptions.Timeout:
+            logger.error(
+                f"Jira API request timed out for comment {comment.id}. "
+                "The request took longer than 10 seconds."
+            )
+        except requests.exceptions.ConnectionError as e:
+            logger.error(
+                f"Jira API connection error for comment {comment.id}: {str(e)}. "
+                "Check if JIRA_URL is correct and the server is reachable."
+            )
+        except requests.exceptions.RequestException as e:
+            logger.error(
+                f"Jira API request exception for comment {comment.id}: {str(e)}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Unexpected error creating Jira comment for comment {comment.id}: {str(e)}",
+                exc_info=True
+            )
+        
 
 
 
@@ -202,12 +271,6 @@ class WebhookViewSet(ViewSet):
         URL: /api/webhooks/jira/update_status/
         Jira sends POST requests with issue data in the payload.
         """
-        # Validate webhook token
-        # is_valid, error_response = self._validate_webhook_token(request)
-        # if not is_valid:
-        #     return error_response
-        
-        # Extract issue data from Jira webhook payload
         issue = request.data.get('issue', {})
         if not issue:
             return Response(
@@ -282,9 +345,126 @@ class WebhookViewSet(ViewSet):
             'status_mapped_to': new_status
         }, status=status.HTTP_200_OK)
     
-    # Example: Add more webhook endpoints here as needed
-    # @action(detail=False, methods=['post'], url_path='slack/notify')
-    # def slack_notify(self, request):
-    #     """Slack webhook endpoint"""
-    #     pass
+   
+    @action(detail=False, methods=['post'], url_path='jira/comment_created')
+    def jira_comment_created(self, request):
+        """
+        Webhook endpoint to create a comment from Jira webhook.
+        
+        URL: /api/webhooks/jira/comment_created/
+        Jira sends POST requests when a comment is created on an issue.
+        """
+        # Extract issue and comment data from Jira webhook payload
+        issue = request.data.get('issue', {})
+        comment = request.data.get('comment', {})
+        
+        if not issue:
+            return Response(
+                {'error': 'Missing issue data in webhook payload'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not comment:
+            return Response(
+                {'error': 'Missing comment data in webhook payload'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        jira_issue_id = issue.get('id')
+        jira_issue_key = issue.get('key')
+        jira_comment_id = comment.get('id')
+        comment_body = comment.get('body', '')
+        comment_author = comment.get('author', {})
+        comment_created = comment.get('created', '')
+        
+        if not jira_issue_id:
+            return Response(
+                {'error': 'Missing Jira issue ID in webhook payload'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Find ticket by jira_issue_id
+        try:
+            ticket = Ticket.objects.get(jira_issue_id=str(jira_issue_id))
+        except Ticket.DoesNotExist:
+            logger.warning(
+                f"Ticket not found for Jira issue {jira_issue_key} (ID: {jira_issue_id})"
+            )
+            return Response(
+                {'error': f'Ticket with Jira issue ID {jira_issue_id} (key: {jira_issue_key}) not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Check if comment already exists (prevent duplicates)
+        if jira_comment_id and Comment.objects.filter(jira_comment_id=str(jira_comment_id)).exists():
+            logger.info(
+                f"Comment with Jira ID {jira_comment_id} already exists. Skipping creation."
+            )
+            existing_comment = Comment.objects.get(jira_comment_id=str(jira_comment_id))
+            serializer = CommentSerializer(existing_comment)
+            return Response({
+                'message': 'Comment already exists',
+                'comment': serializer.data
+            }, status=status.HTTP_200_OK)
+        
+        
+        # Get the first admin user (staff user)
+        admin_user = User.objects.filter(is_staff=True).first()
+        
+        if not admin_user:
+            # Fallback: if no admin exists, use ticket assignee
+            logger.warning(
+                f"No admin user found. Using ticket assignee {ticket.assignee.username} as comment author."
+            )
+            comment_author_user = ticket.assignee
+        else:
+            comment_author_user = admin_user
+            logger.info(
+                f"Using admin user {admin_user.username} as comment author for Jira webhook comment."
+            )
+        
+        # Extract text from comment body (Jira may send HTML or ADF format)
+        # If Jira sends HTML, you might need to strip tags
+        import re
+        if isinstance(comment_body, str):
+            # Remove HTML tags if present
+            comment_content = re.sub(r'<[^>]+>', '', comment_body)
+        elif isinstance(comment_body, dict):
+            # If Jira sends ADF (Atlassian Document Format), extract text
+            # This is a simplified version - you may need more complex parsing
+            comment_content = str(comment_body)
+        else:
+            comment_content = str(comment_body) if comment_body else ''
+        
+        # Create the comment
+        try:
+            new_comment = Comment.objects.create(
+                ticket=ticket,
+                author=comment_author_user,
+                content=comment_content,
+                jira_comment_id=str(jira_comment_id) if jira_comment_id else None
+            )
+            
+            logger.info(
+                f"Successfully created comment {new_comment.id} from Jira webhook "
+                f"(Jira comment ID: {jira_comment_id}, Issue: {jira_issue_key})"
+            )
+            
+            serializer = CommentSerializer(new_comment)
+            return Response({
+                'message': 'Comment created successfully from Jira webhook',
+                'comment': serializer.data,
+                'jira_issue_key': jira_issue_key,
+                'jira_comment_id': jira_comment_id
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            logger.error(
+                f"Error creating comment from Jira webhook: {str(e)}",
+                exc_info=True
+            )
+            return Response(
+                {'error': f'Failed to create comment: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 

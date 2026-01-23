@@ -34,6 +34,7 @@ class Comment(models.Model):
     )
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+    jira_comment_id = models.CharField(max_length=50, blank=True, null=True, help_text='Jira comment ID if synced to Jira')
 
     def __str__(self):
         return self.content
