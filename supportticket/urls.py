@@ -18,7 +18,6 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from ticket.views import TicketViewSet, CommentViewSet, WebhookViewSet
-import user.views as user_views
 
 # Create a router and register our viewsets
 router = DefaultRouter()
@@ -29,8 +28,5 @@ router.register(r'webhooks', WebhookViewSet, basename='webhook')
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
-    path('api/auth/register/', user_views.register_view, name='api_register'),
-    path('api/auth/login/', user_views.login_view, name='api_login'),
-    path('api/auth/logout/', user_views.logout_view, name='api_logout'),
-    path('api/auth/user/', user_views.current_user_view, name='api_current_user'),
+    path('api/auth/', include('user.urls')),
 ]

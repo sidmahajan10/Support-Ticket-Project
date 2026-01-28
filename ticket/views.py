@@ -247,21 +247,6 @@ class WebhookViewSet(ViewSet):
     """
     permission_classes = [AllowAny]  # Webhooks don't use session auth
     
-    # def _validate_webhook_token(self, request):
-    #     """
-    #     Validate webhook token from headers or request body.
-    #     Returns (is_valid, error_response)
-    #     """
-    #     webhook_token = request.headers.get('X-Webhook-Token') or request.data.get('webhook_token')
-    #     expected_token = os.getenv('WEBHOOK_SECRET_TOKEN')
-        
-    #     if expected_token and webhook_token != expected_token:
-    #         return False, Response(
-    #             {'error': 'Invalid webhook token'},
-    #             status=status.HTTP_401_UNAUTHORIZED
-    #         )
-        
-    #     return True, None
     
     @action(detail=False, methods=['post'], url_path='jira/update_status')
     def jira_update_status(self, request):
