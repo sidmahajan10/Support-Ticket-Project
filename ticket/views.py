@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 class TicketViewSet(viewsets.ModelViewSet):
     serializer_class = TicketSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None # Disable pagination for the ticket list as filtering is done at the frontend
 
     def get_queryset(self):
         """
