@@ -18,12 +18,14 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from ticket.views import TicketViewSet, CommentViewSet, WebhookViewSet
+from agents.views import AgentViewSet
 
 # Create a router and register our viewsets
 router = DefaultRouter()
 router.register(r'tickets', TicketViewSet, basename='ticket')
 router.register(r'comments', CommentViewSet, basename='comment')
 router.register(r'webhooks', WebhookViewSet, basename='webhook')
+router.register(r'agents', AgentViewSet, basename='agent')
 
 urlpatterns = [
     path('admin/', admin.site.urls),

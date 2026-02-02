@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import TicketList from './TicketList';
-import CreateTicket from './CreateTicket';
+import AgentTicketFlow from './AgentTicketFlow';
 import './Dashboard.css';
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
   const isAdmin = user?.is_staff || false;
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showAgentFlow, setShowAgentFlow] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const handleLogout = async () => {
@@ -16,7 +16,7 @@ const Dashboard = () => {
   };
 
   const handleTicketCreated = () => {
-    setShowCreateForm(false);
+    setShowAgentFlow(false);
     setRefreshKey((prev) => prev + 1);
   };
 
@@ -46,17 +46,20 @@ const Dashboard = () => {
           </div>
           {!isAdmin && (
             <button
-              onClick={() => setShowCreateForm(!showCreateForm)}
+              onClick={() => setShowAgentFlow(true)}
               className="btn btn-primary"
             >
-              {showCreateForm ? 'Cancel' : '+ Create New Ticket'}
+              + Create Ticket
             </button>
           )}
         </div>
 
-        {showCreateForm && (
+        {showAgentFlow && (
           <div className="create-ticket-section">
-            <CreateTicket onTicketCreated={handleTicketCreated} />
+            <AgentTicketFlow
+              onTicketCreated={handleTicketCreated}
+              onCancel={() => setShowAgentFlow(false)}
+            />
           </div>
         )}
 
